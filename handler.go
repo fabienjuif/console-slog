@@ -38,6 +38,10 @@ type HandlerOptions struct {
 
 	// Theme defines the colorized output using ANSI escape sequences
 	Theme Theme
+
+	// See [slog.HandlerOptions] for details.
+	// Groups are not supported though.
+	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
 type Handler struct {
@@ -92,6 +96,9 @@ func (h *Handler) Handle(_ context.Context, rec slog.Record) error {
 	h.enc.writeMessage(buf, rec.Level, rec.Message)
 	buf.copy(&h.context)
 	rec.Attrs(func(a slog.Attr) bool {
+		if h.opts.ReplaceAttr != nil {
+			a = h.opts.ReplaceAttr(nil, a)
+		}
 		h.enc.writeAttr(buf, a, h.group)
 		return true
 	})
