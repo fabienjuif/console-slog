@@ -4,13 +4,36 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/phsym/console-slog"
 )
 
 func main() {
 	logger := slog.New(
-		console.NewHandler(os.Stderr, &console.HandlerOptions{Level: slog.LevelDebug, AddSource: true}),
+		console.NewHandler(os.Stderr, &console.HandlerOptions{
+			Level:      slog.LevelDebug,
+			AddSource:  true,
+			TimeFormat: "15:04:05.000000",
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if v, ok := a.Value.Any().(*slog.Source); ok {
+					file := v.File
+					parts := strings.Split(v.File, "/")
+					if len(parts) > 0 {
+						file = parts[len(parts)-1]
+					}
+					return slog.Attr{
+						Key: slog.SourceKey,
+						Value: slog.AnyValue(&slog.Source{
+							Function: v.Function,
+							File:     file,
+							Line:     v.Line,
+						}),
+					}
+				}
+				return a
+			},
+		}),
 	)
 	slog.SetDefault(logger)
 	slog.Info("Hello world!", "foo", "bar")

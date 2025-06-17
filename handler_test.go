@@ -26,6 +26,29 @@ func TestHandler_TimeFormat(t *testing.T) {
 	AssertEqual(t, expected, buf.String())
 }
 
+func TestHandler_ReplaceAttr(t *testing.T) {
+	ra := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == "test-key" {
+			return slog.Attr{Key: "testkey", Value: a.Value}
+		}
+		if a.Key == "empty" {
+			return slog.Attr{}
+		}
+		return a
+	}
+	buf := bytes.Buffer{}
+	h := NewHandler(&buf, &HandlerOptions{TimeFormat: time.RFC3339Nano, NoColor: true, ReplaceAttr: ra})
+	rec := slog.NewRecord(time.Time{}, slog.LevelInfo, "foobar", 0)
+	rec.AddAttrs(
+		slog.String("test-key", "test-value"),
+		slog.String("empty", "should not be logged"),
+	)
+	AssertNoError(t, h.Handle(context.Background(), rec))
+
+	expected := fmt.Sprintf("INF foobar testkey=test-value\n")
+	AssertEqual(t, expected, buf.String())
+}
+
 // Handlers should not log the time field if it is zero.
 // '- If r.Time is the zero time, ignore the time.'
 // https://pkg.go.dev/log/slog@master#Handler

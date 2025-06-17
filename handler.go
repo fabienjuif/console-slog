@@ -5,6 +5,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,10 @@ type HandlerOptions struct {
 
 	// Theme defines the colorized output using ANSI escape sequences
 	Theme Theme
+
+	// See [slog.HandlerOptions] for details.
+	// Groups are not supported though.
+	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
 type Handler struct {
@@ -87,11 +93,35 @@ func (h *Handler) Handle(_ context.Context, rec slog.Record) error {
 	h.enc.writeTimestamp(buf, rec.Time)
 	h.enc.writeLevel(buf, rec.Level)
 	if h.opts.AddSource && rec.PC > 0 {
-		h.enc.writeSource(buf, rec.PC, cwd)
+		frame, _ := runtime.CallersFrames([]uintptr{rec.PC}).Next()
+		if cwd != "" {
+			if ff, err := filepath.Rel(cwd, frame.File); err == nil {
+				frame.File = ff
+			}
+		}
+		a := slog.Attr{
+			Key: slog.SourceKey,
+			Value: slog.AnyValue(&slog.Source{
+				Function: frame.Function,
+				File:     frame.File,
+				Line:     frame.Line,
+			}),
+		}
+		if h.opts.ReplaceAttr != nil {
+			a = h.opts.ReplaceAttr(nil, a)
+		}
+		h.enc.writeAttr(
+			buf,
+			a,
+			h.group,
+		)
 	}
 	h.enc.writeMessage(buf, rec.Level, rec.Message)
 	buf.copy(&h.context)
 	rec.Attrs(func(a slog.Attr) bool {
+		if h.opts.ReplaceAttr != nil {
+			a = h.opts.ReplaceAttr(nil, a)
+		}
 		h.enc.writeAttr(buf, a, h.group)
 		return true
 	})

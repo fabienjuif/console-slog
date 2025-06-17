@@ -3,8 +3,6 @@ package console
 import (
 	"fmt"
 	"log/slog"
-	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -75,21 +73,6 @@ func (e encoder) writeTimestamp(buf *buffer, tt time.Time) {
 	}
 }
 
-func (e encoder) writeSource(buf *buffer, pc uintptr, cwd string) {
-	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
-	if cwd != "" {
-		if ff, err := filepath.Rel(cwd, frame.File); err == nil {
-			frame.File = ff
-		}
-	}
-	e.withColor(buf, e.opts.Theme.Source(), func() {
-		buf.AppendString(frame.File)
-		buf.AppendByte(':')
-		buf.AppendInt(int64(frame.Line))
-	})
-	e.writeColoredString(buf, " > ", e.opts.Theme.AttrKey())
-}
-
 func (e encoder) writeMessage(buf *buffer, level slog.Level, msg string) {
 	if level >= slog.LevelInfo {
 		e.writeColoredString(buf, msg, e.opts.Theme.Message())
@@ -102,6 +85,18 @@ func (e encoder) writeAttr(buf *buffer, a slog.Attr, group string) {
 	// Elide empty Attrs.
 	if a.Equal(slog.Attr{}) {
 		return
+	}
+	// Special handling for source attribute.
+	if a.Key == slog.SourceKey {
+		if v, ok := a.Value.Any().(*slog.Source); ok {
+			e.withColor(buf, e.opts.Theme.Source(), func() {
+				buf.AppendString(v.File)
+				buf.AppendByte(':')
+				buf.AppendInt(int64(v.Line))
+			})
+			e.writeColoredString(buf, " > ", e.opts.Theme.AttrKey())
+			return
+		}
 	}
 	value := a.Value.Resolve()
 	if value.Kind() == slog.KindGroup {
