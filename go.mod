@@ -1,3 +1,3 @@
-module github.com/phsym/console-slog
+module github.com/fabienjuif/console-slog
 
 go 1.21
